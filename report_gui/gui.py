@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import subprocess
+import json
 import sys
 import tkinter as tk
 from pathlib import Path
@@ -20,7 +21,7 @@ class ReportApp:
         self.root = root
         self.root.title("Automation Test Summary Browser")
         self.root.geometry("1100x700")
-        self.root.minsize(900, 600)
+        self.root.minsize(720, 480)
 
         self.summary = None
         self.loaded_paths: list[Path] = []
@@ -38,6 +39,7 @@ class ReportApp:
         self._init_style()
         self._create_menu()
         self._build_layout()
+        self._configure_exit_handlers()
 
     def _detect_default_script(self) -> Path | None:
         candidate_dirs: list[Path] = []
@@ -81,7 +83,7 @@ class ReportApp:
             command=self.on_copy_problem_tests,
         )
         file_menu.add_separator()
-        file_menu.add_command(label="Exit", command=self.root.quit)
+        file_menu.add_command(label="Exit", command=self.on_exit)
         menubar.add_cascade(label="File", menu=file_menu)
         self.root.config(menu=menubar)
         self.menubar = menubar
@@ -116,6 +118,10 @@ class ReportApp:
         main_pane.add(left_frame, weight=2)
         main_pane.add(right_pane, weight=3)
 
+        # Keep references for state restore/save
+        self.main_pane = main_pane
+        self.right_pane = right_pane
+
         group_frame = ttk.LabelFrame(left_frame, text="Grouped Results")
         group_frame.pack(fill=tk.BOTH, expand=True)
 
@@ -132,6 +138,15 @@ class ReportApp:
 
         self.group_tree = self._create_group_tree(group_frame)
         self.execution_tree = self._create_execution_tree(execution_frame)
+
+        # Responsive behavior bindings
+        self._install_responsive_layout(control_frame)
+
+        # Compute initial sizes after widgets are realized
+        self.root.after(0, self._update_top_bar_wraplength)
+        self.root.after(0, self._auto_size_group_tree)
+        self.root.after(0, self._auto_size_execution_tree)
+        self.root.after(0, self._restore_layout_state)
 
         self.details_text = tk.Text(
             details_frame,
@@ -200,14 +215,27 @@ class ReportApp:
             tree.column(column, width=widths[column], anchor=anchor, stretch=False)
         tree.grid(row=0, column=0, sticky="nsew")
 
-        scrollbar = ttk.Scrollbar(
+        vscrollbar = ttk.Scrollbar(
             container, orient=tk.VERTICAL, command=tree.yview
         )
-        tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=vscrollbar.set)
+        vscrollbar.grid(row=0, column=1, sticky="ns")
+
+        hscrollbar = ttk.Scrollbar(
+            container, orient=tk.HORIZONTAL, command=tree.xview
+        )
+        tree.configure(xscrollcommand=hscrollbar.set)
+        hscrollbar.grid(row=1, column=0, sticky="ew")
 
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
+
+        # Keep reference for responsive sizing
+        self._group_container = container
+        self._group_tree_base_widths = widths
+
+        # Bind container size changes to auto-size columns
+        container.bind("<Configure>", lambda e: self._auto_size_group_tree())
 
         tree.bind("<<TreeviewSelect>>", self.on_group_select)
         return tree
@@ -241,17 +269,180 @@ class ReportApp:
             tree.column(column, width=widths[column], anchor=anchor, stretch=False)
         tree.grid(row=0, column=0, sticky="nsew")
 
-        scrollbar = ttk.Scrollbar(
+        vscrollbar = ttk.Scrollbar(
             container, orient=tk.VERTICAL, command=tree.yview
         )
-        tree.configure(yscrollcommand=scrollbar.set)
-        scrollbar.grid(row=0, column=1, sticky="ns")
+        tree.configure(yscrollcommand=vscrollbar.set)
+        vscrollbar.grid(row=0, column=1, sticky="ns")
+
+        hscrollbar = ttk.Scrollbar(
+            container, orient=tk.HORIZONTAL, command=tree.xview
+        )
+        tree.configure(xscrollcommand=hscrollbar.set)
+        hscrollbar.grid(row=1, column=0, sticky="ew")
 
         container.rowconfigure(0, weight=1)
         container.columnconfigure(0, weight=1)
 
+        # Keep reference for responsive sizing
+        self._exec_container = container
+        self._exec_tree_base_widths = widths
+
+        # Bind container size changes to auto-size columns
+        container.bind("<Configure>", lambda e: self._auto_size_execution_tree())
+
         tree.bind("<<TreeviewSelect>>", self.on_execution_select)
         return tree
+
+    # ----- Responsive helpers -----
+    def _install_responsive_layout(self, control_frame: ttk.Frame) -> None:
+        # Update wraplength of file label when the top bar changes size
+        control_frame.bind("<Configure>", lambda e: self._update_top_bar_wraplength())
+
+    def _update_top_bar_wraplength(self) -> None:
+        try:
+            width = self.file_label.winfo_toplevel().winfo_width()
+        except Exception:
+            return
+        # Reserve space for button and summary label; clamp sensible bounds
+        available = max(200, width - 420)
+        self.file_label.configure(wraplength=available)
+
+    def _auto_size_group_tree(self) -> None:
+        if not hasattr(self, "_group_container"):
+            return
+        container_w = self._group_container.winfo_width() or 0
+        if container_w <= 100:
+            return
+        scrollbar_w = 18
+        padding = 8
+        avail = max(0, container_w - scrollbar_w - padding)
+
+        widths = dict(self._group_tree_base_widths)
+        fixed_cols = [
+            "total",
+            "pass",
+            "fail",
+            "error",
+            "skip",
+            "unknown",
+            "error_rate",
+            "result",
+        ]
+        fixed_total = sum(widths[c] for c in fixed_cols)
+        min_test = 120
+        base_test = widths["test"]
+        base_total = fixed_total + base_test
+
+        if avail >= base_total:
+            # Give all extra space to the Test column
+            new_test = avail - fixed_total
+        else:
+            # Shrink Test column first, keep a minimum
+            deficit = base_total - avail
+            new_test = max(min_test, base_test - deficit)
+
+        self.group_tree.column("test", width=int(new_test))
+        for col in fixed_cols:
+            self.group_tree.column(col, width=int(widths[col]))
+
+    def _auto_size_execution_tree(self) -> None:
+        if not hasattr(self, "_exec_container"):
+            return
+        container_w = self._exec_container.winfo_width() or 0
+        if container_w <= 100:
+            return
+        scrollbar_w = 18
+        padding = 8
+        avail = max(0, container_w - scrollbar_w - padding)
+
+        widths = dict(self._exec_tree_base_widths)
+        fixed_cols = ["iteration", "result"]
+        flex_cols = ["begin", "end"]
+        fixed_total = sum(widths[c] for c in fixed_cols)
+        base_flex_total = sum(widths[c] for c in flex_cols)
+        base_total = fixed_total + base_flex_total
+        min_flex = 120
+
+        if avail >= base_total:
+            extra = avail - fixed_total
+            each = max(min_flex, extra // 2)
+            self.execution_tree.column("begin", width=int(each))
+            self.execution_tree.column("end", width=int(extra - each))
+        else:
+            # Shrink flex columns evenly but keep a minimum
+            remaining_for_flex = max(2 * min_flex, avail - fixed_total)
+            each = max(min_flex, remaining_for_flex // 2)
+            self.execution_tree.column("begin", width=int(each))
+            self.execution_tree.column("end", width=int(remaining_for_flex - each))
+
+        for col in fixed_cols:
+            self.execution_tree.column(col, width=int(widths[col]))
+
+    # ----- Persist/restore layout -----
+    def _state_file_path(self) -> Path:
+        return Path.home() / ".report_gen_ui.json"
+
+    def _configure_exit_handlers(self) -> None:
+        self.root.protocol("WM_DELETE_WINDOW", self._on_close)
+
+    def on_exit(self) -> None:
+        self._on_close()
+
+    def _on_close(self) -> None:
+        try:
+            self._save_layout_state()
+        except Exception:
+            pass
+        # Ensure the window is destroyed (quit would leave event loop)
+        try:
+            self.root.destroy()
+        except Exception:
+            pass
+
+    def _restore_layout_state(self) -> None:
+        state_path = self._state_file_path()
+        if not state_path.exists():
+            return
+        try:
+            with state_path.open("r", encoding="utf-8") as f:
+                data = json.load(f)
+        except Exception:
+            return
+
+        # Need realized sizes to compute pixels from ratios
+        main_w = max(1, self.main_pane.winfo_width())
+        right_h = max(1, self.right_pane.winfo_height())
+        if main_w <= 1 or right_h <= 1:
+            # Try again shortly if not ready
+            self.root.after(50, self._restore_layout_state)
+            return
+
+        try:
+            m_ratio = float(data.get("main_ratio", 0.4))
+            r_ratio = float(data.get("right_ratio", 0.5))
+            m_pos = int(max(80, min(main_w - 80, m_ratio * main_w)))
+            r_pos = int(max(60, min(right_h - 60, r_ratio * right_h)))
+            self.main_pane.sashpos(0, m_pos)
+            self.right_pane.sashpos(0, r_pos)
+        except Exception:
+            pass
+
+    def _save_layout_state(self) -> None:
+        try:
+            main_w = max(1, self.main_pane.winfo_width())
+            right_h = max(1, self.right_pane.winfo_height())
+            m_pos = max(1, int(self.main_pane.sashpos(0)))
+            r_pos = max(1, int(self.right_pane.sashpos(0)))
+            data = {
+                "main_ratio": max(0.05, min(0.95, m_pos / main_w)),
+                "right_ratio": max(0.1, min(0.9, r_pos / right_h)),
+            }
+            state_path = self._state_file_path()
+            with state_path.open("w", encoding="utf-8") as f:
+                json.dump(data, f)
+        except Exception:
+            pass
 
     def on_open_summary(self) -> None:
         file_paths = filedialog.askopenfilenames(
