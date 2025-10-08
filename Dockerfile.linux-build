@@ -7,6 +7,7 @@ ENV DEBIAN_FRONTEND=noninteractive \
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3 python3-venv python3-pip python3-tk \
+    libpython3.11 \
     build-essential git ca-certificates \
     patchelf \
     && rm -rf /var/lib/apt/lists/*
@@ -15,4 +16,3 @@ WORKDIR /workspace
 
 # Default to interactive shell; the build script will be invoked by docker run
 CMD ["bash"]
-
