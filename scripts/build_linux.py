@@ -11,7 +11,8 @@ VENV_DIR = Path(sys.environ.get("VENV_DIR", ROOT_DIR / ".venv-build-linux"))
 DIST_DIR = ROOT_DIR / "dist" / "linux"
 SPEC_NAME = "report-gen"
 MAIN_MODULE = ROOT_DIR / "main.py"
-REQUIREMENTS = ROOT_DIR / "requirements-linux.txt"
+REQUIREMENTS_LINUX = ROOT_DIR / "requirements-linux.txt"
+REQUIREMENTS_TXT = ROOT_DIR / "requirements.txt"
 TEMPLATE_PATH = ROOT_DIR / "[Template] [LEA] SASS Certification Automation Test Report.xlsx"
 FILL_REPORT = ROOT_DIR / "fill_report.py"
 
@@ -32,10 +33,22 @@ def venv_python() -> Path:
     return VENV_DIR / "bin" / "python"
 
 
+def _resolve_requirements() -> Path:
+    # Prefer Linux-specific requirements if present, otherwise fallback.
+    if REQUIREMENTS_LINUX.exists():
+        return REQUIREMENTS_LINUX
+    if REQUIREMENTS_TXT.exists():
+        return REQUIREMENTS_TXT
+    raise FileNotFoundError(
+        "No requirements file found (expected requirements-linux.txt or requirements.txt)."
+    )
+
+
 def install_dependencies() -> None:
     python = venv_python()
     run([str(python), "-m", "pip", "install", "--upgrade", "pip"])
-    run([str(python), "-m", "pip", "install", "-r", str(REQUIREMENTS)])
+    req = _resolve_requirements()
+    run([str(python), "-m", "pip", "install", "-r", str(req)])
 
 
 def run_pyinstaller() -> None:
