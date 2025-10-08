@@ -61,12 +61,16 @@ def run_pyinstaller() -> None:
         "--noconfirm",
         "--name",
         SPEC_NAME,
-        "--add-data",
-        f"{FILL_REPORT}:{'.'}",
-        "--add-data",
-        f"{TEMPLATE_PATH}:templates",
         str(MAIN_MODULE),
     ]
+    if FILL_REPORT.exists():
+        cmd.extend(["--add-data", f"{FILL_REPORT}:{'.'}"])
+    else:
+        print(f"WARN: fill_report not found at {FILL_REPORT}; skipping bundling.")
+    if TEMPLATE_PATH.exists():
+        cmd.extend(["--add-data", f"{TEMPLATE_PATH}:templates"])
+    else:
+        print(f"WARN: template not found at {TEMPLATE_PATH}; skipping bundling.")
     run(cmd)
 
 
