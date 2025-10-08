@@ -18,6 +18,7 @@ dist/
 .cache/
 .coverage
 .pytest_cache/
+*.spec
 
 # Virtual envs
 .venv/
@@ -30,3 +31,4 @@ env/
 .idea/
 
 sample/
+.venv-build-*/
