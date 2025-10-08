@@ -4,10 +4,11 @@ from __future__ import annotations
 
 import subprocess
 import sys
+import os
 from pathlib import Path
 
 ROOT_DIR = Path(__file__).resolve().parents[1]
-VENV_DIR = Path(sys.environ.get("VENV_DIR", ROOT_DIR / ".venv-build-linux"))
+VENV_DIR = Path(os.environ.get("VENV_DIR", ROOT_DIR / ".venv-build-linux"))
 DIST_DIR = ROOT_DIR / "dist" / "linux"
 SPEC_NAME = "report-gen"
 MAIN_MODULE = ROOT_DIR / "main.py"
