@@ -11,6 +11,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from typing import Dict, Iterable, Optional, Sequence
 
 from . import data_loader, exporter, stats, ui_helpers, view_model
+from .layout import compute_exec_tree_widths, compute_group_tree_widths
 from .models import TestExecution
 
 
@@ -35,6 +36,14 @@ class ReportApp:
         self.group_rows: list[view_model.GroupRow] = []
         self.group_sort_states: dict[str, bool] = {}
         self.current_group_latency_summary: dict[str, float] = {}
+
+        # Resize/Configure guards to avoid feedback loops (especially on Linux)
+        self._group_resize_job = None  # type: Optional[str]
+        self._exec_resize_job = None   # type: Optional[str]
+        self._topbar_resize_job = None # type: Optional[str]
+        self._group_last_widths: dict[str, int] = {}
+        self._exec_last_widths: dict[str, int] = {}
+        self._last_wraplength: Optional[int] = None
 
         self._init_style()
         self._create_menu()
@@ -234,8 +243,8 @@ class ReportApp:
         self._group_container = container
         self._group_tree_base_widths = widths
 
-        # Bind container size changes to auto-size columns
-        container.bind("<Configure>", lambda e: self._auto_size_group_tree())
+        # Bind container size changes to auto-size columns (debounced)
+        container.bind("<Configure>", self._queue_group_resize)
 
         tree.bind("<<TreeviewSelect>>", self.on_group_select)
         return tree
@@ -288,16 +297,16 @@ class ReportApp:
         self._exec_container = container
         self._exec_tree_base_widths = widths
 
-        # Bind container size changes to auto-size columns
-        container.bind("<Configure>", lambda e: self._auto_size_execution_tree())
+        # Bind container size changes to auto-size columns (debounced)
+        container.bind("<Configure>", self._queue_exec_resize)
 
         tree.bind("<<TreeviewSelect>>", self.on_execution_select)
         return tree
 
     # ----- Responsive helpers -----
     def _install_responsive_layout(self, control_frame: ttk.Frame) -> None:
-        # Update wraplength of file label when the top bar changes size
-        control_frame.bind("<Configure>", lambda e: self._update_top_bar_wraplength())
+        # Update wraplength of file label when the top bar changes size (debounced)
+        control_frame.bind("<Configure>", self._queue_topbar_resize)
 
     def _update_top_bar_wraplength(self) -> None:
         try:
@@ -306,7 +315,22 @@ class ReportApp:
             return
         # Reserve space for button and summary label; clamp sensible bounds
         available = max(200, width - 420)
+        if self._last_wraplength == available:
+            return
+        self._last_wraplength = available
         self.file_label.configure(wraplength=available)
+
+    def _queue_topbar_resize(self, event: tk.Event) -> None:  # pragma: no cover - UI binding
+        if self._topbar_resize_job is not None:
+            try:
+                self.root.after_cancel(self._topbar_resize_job)
+            except Exception:
+                pass
+        self._topbar_resize_job = self.root.after(50, self._run_topbar_resize)
+
+    def _run_topbar_resize(self) -> None:
+        self._topbar_resize_job = None
+        self._update_top_bar_wraplength()
 
     def _auto_size_group_tree(self) -> None:
         if not hasattr(self, "_group_container"):
@@ -314,10 +338,6 @@ class ReportApp:
         container_w = self._group_container.winfo_width() or 0
         if container_w <= 100:
             return
-        scrollbar_w = 18
-        padding = 8
-        avail = max(0, container_w - scrollbar_w - padding)
-
         widths = dict(self._group_tree_base_widths)
         fixed_cols = [
             "total",
@@ -329,22 +349,14 @@ class ReportApp:
             "error_rate",
             "result",
         ]
-        fixed_total = sum(widths[c] for c in fixed_cols)
-        min_test = 120
-        base_test = widths["test"]
-        base_total = fixed_total + base_test
+        new_widths = compute_group_tree_widths(container_w, widths)
+        if new_widths == self._group_last_widths:
+            return
+        self._group_last_widths = dict(new_widths)
 
-        if avail >= base_total:
-            # Give all extra space to the Test column
-            new_test = avail - fixed_total
-        else:
-            # Shrink Test column first, keep a minimum
-            deficit = base_total - avail
-            new_test = max(min_test, base_test - deficit)
-
-        self.group_tree.column("test", width=int(new_test))
+        self.group_tree.column("test", width=new_widths["test"])
         for col in fixed_cols:
-            self.group_tree.column(col, width=int(widths[col]))
+            self.group_tree.column(col, width=new_widths[col])
 
     def _auto_size_execution_tree(self) -> None:
         if not hasattr(self, "_exec_container"):
@@ -352,32 +364,41 @@ class ReportApp:
         container_w = self._exec_container.winfo_width() or 0
         if container_w <= 100:
             return
-        scrollbar_w = 18
-        padding = 8
-        avail = max(0, container_w - scrollbar_w - padding)
-
         widths = dict(self._exec_tree_base_widths)
         fixed_cols = ["iteration", "result"]
-        flex_cols = ["begin", "end"]
-        fixed_total = sum(widths[c] for c in fixed_cols)
-        base_flex_total = sum(widths[c] for c in flex_cols)
-        base_total = fixed_total + base_flex_total
-        min_flex = 120
+        new_widths_exec = compute_exec_tree_widths(container_w, widths)
+        if new_widths_exec == self._exec_last_widths:
+            return
+        self._exec_last_widths = dict(new_widths_exec)
 
-        if avail >= base_total:
-            extra = avail - fixed_total
-            each = max(min_flex, extra // 2)
-            self.execution_tree.column("begin", width=int(each))
-            self.execution_tree.column("end", width=int(extra - each))
-        else:
-            # Shrink flex columns evenly but keep a minimum
-            remaining_for_flex = max(2 * min_flex, avail - fixed_total)
-            each = max(min_flex, remaining_for_flex // 2)
-            self.execution_tree.column("begin", width=int(each))
-            self.execution_tree.column("end", width=int(remaining_for_flex - each))
-
+        self.execution_tree.column("begin", width=new_widths_exec["begin"])
+        self.execution_tree.column("end", width=new_widths_exec["end"])
         for col in fixed_cols:
-            self.execution_tree.column(col, width=int(widths[col]))
+            self.execution_tree.column(col, width=new_widths_exec[col])
+
+    def _queue_group_resize(self, event: tk.Event) -> None:  # pragma: no cover - UI binding
+        if self._group_resize_job is not None:
+            try:
+                self.root.after_cancel(self._group_resize_job)
+            except Exception:
+                pass
+        self._group_resize_job = self.root.after(50, self._run_group_resize)
+
+    def _run_group_resize(self) -> None:
+        self._group_resize_job = None
+        self._auto_size_group_tree()
+
+    def _queue_exec_resize(self, event: tk.Event) -> None:  # pragma: no cover - UI binding
+        if self._exec_resize_job is not None:
+            try:
+                self.root.after_cancel(self._exec_resize_job)
+            except Exception:
+                pass
+        self._exec_resize_job = self.root.after(50, self._run_exec_resize)
+
+    def _run_exec_resize(self) -> None:
+        self._exec_resize_job = None
+        self._auto_size_execution_tree()
 
     # ----- Persist/restore layout -----
     def _state_file_path(self) -> Path:
