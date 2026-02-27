@@ -25,6 +25,9 @@ dist/
 venv/
 env/
 .env
+frontend/node_modules/
+frontend/dist/
+frontend/src-tauri/target/
 
 # Editors/IDE
 .vscode/
