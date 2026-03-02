@@ -79,3 +79,4 @@ jobs:
           releaseBody: "Automated desktop release for ${{ steps.release.outputs.tag }}"
           releaseDraft: false
           prerelease: false
+          includeUpdaterJson: false

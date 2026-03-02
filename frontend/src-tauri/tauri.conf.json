@@ -2,7 +2,7 @@
   "$schema": "../node_modules/@tauri-apps/cli/config.schema.json",
   "productName": "Report Generator",
   "version": "0.1.0",
-  "identifier": "com.cy76.report_gen",
+  "identifier": "com.cy76.reportgen",
   "build": {
     "beforeDevCommand": "npm run dev",
     "beforeBuildCommand": "npm run build",
