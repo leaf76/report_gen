@@ -23,8 +23,10 @@ jobs:
         include:
           - platform: linux
             runner: ubuntu-24.04
+            bundles: deb,rpm
           - platform: macos
             runner: macos-latest
+            bundles: app,dmg
     runs-on: ${{ matrix.runner }}
 
     steps:
@@ -74,6 +76,7 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           projectPath: frontend
+          args: --bundles ${{ matrix.bundles }}
           tagName: ${{ steps.release.outputs.tag }}
           releaseName: "Report Generator ${{ steps.release.outputs.tag }}"
           releaseBody: "Automated desktop release for ${{ steps.release.outputs.tag }}"
