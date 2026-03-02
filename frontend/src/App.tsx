@@ -7,11 +7,13 @@ import {
   fetchProblemTests,
   parseSummaries
 } from "./api/client";
+import type { GroupSortKey, GroupSortState, SortDirection } from "./components/GroupTable";
 import SidebarPanel from "./components/SidebarPanel";
 import AnalysisPage from "./pages/AnalysisPage";
 import ImportPage from "./pages/ImportPage";
 import type {
   ExecutionRow,
+  GroupRow,
   GroupExecutionsResponse,
   ParseSummaryResponse,
   SummaryInput
@@ -40,6 +42,52 @@ function groupSeverityScore(groupResult: string): number {
     return 1;
   }
   return 0;
+}
+
+function getResultCount(row: GroupRow, key: "pass" | "fail" | "error" | "skip"): number {
+  if (key === "pass") {
+    return row.by_result.PASS ?? 0;
+  }
+  if (key === "fail") {
+    return row.by_result.FAIL ?? 0;
+  }
+  if (key === "error") {
+    return row.by_result.ERROR ?? 0;
+  }
+  return row.by_result.SKIP ?? 0;
+}
+
+function compareByDefaultSort(left: GroupRow, right: GroupRow): number {
+  const severityDiff = groupSeverityScore(right.group_result) - groupSeverityScore(left.group_result);
+  if (severityDiff !== 0) {
+    return severityDiff;
+  }
+
+  const errorRateDiff = right.error_rate - left.error_rate;
+  if (errorRateDiff !== 0) {
+    return errorRateDiff;
+  }
+
+  const failureCountDiff = right.failure_count - left.failure_count;
+  if (failureCountDiff !== 0) {
+    return failureCountDiff;
+  }
+
+  return left.base_name.localeCompare(right.base_name);
+}
+
+function compareBySortKey(left: GroupRow, right: GroupRow, key: GroupSortKey): number {
+  if (key === "base_name") {
+    return left.base_name.localeCompare(right.base_name);
+  }
+  if (key === "total") {
+    return left.total - right.total;
+  }
+  if (key === "error_rate") {
+    return left.error_rate - right.error_rate;
+  }
+
+  return getResultCount(left, key) - getResultCount(right, key);
 }
 
 function toMessage(error: unknown): string {
@@ -91,6 +139,10 @@ export default function App(): React.ReactElement {
 
   const [searchTerm, setSearchTerm] = useState("");
   const [filterMode, setFilterMode] = useState<GroupFilterMode>("all");
+  const [sortState, setSortState] = useState<GroupSortState>({
+    key: null,
+    direction: "desc"
+  });
   const [executionModalOpen, setExecutionModalOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState<boolean>(() => {
     if (typeof window === "undefined") {
@@ -152,8 +204,6 @@ export default function App(): React.ReactElement {
       setExecutionModalOpen(false);
       setFilterMode("all");
       setImportInfoMessage(formatImportMessage(newSummaries.length, duplicateCount));
-
-      navigate("/analysis");
 
       try {
         const problems = await fetchProblemTests(parsed.summary_id);
@@ -248,27 +298,20 @@ export default function App(): React.ReactElement {
     });
 
     rows.sort((left, right) => {
-      const severityDiff =
-        groupSeverityScore(right.group_result) - groupSeverityScore(left.group_result);
-      if (severityDiff !== 0) {
-        return severityDiff;
+      if (sortState.key === null) {
+        return compareByDefaultSort(left, right);
       }
 
-      const errorRateDiff = right.error_rate - left.error_rate;
-      if (errorRateDiff !== 0) {
-        return errorRateDiff;
+      const directionMultiplier = sortState.direction === "asc" ? 1 : -1;
+      const primaryDiff = compareBySortKey(left, right, sortState.key);
+      if (primaryDiff !== 0) {
+        return primaryDiff * directionMultiplier;
       }
-
-      const failureCountDiff = right.failure_count - left.failure_count;
-      if (failureCountDiff !== 0) {
-        return failureCountDiff;
-      }
-
       return left.base_name.localeCompare(right.base_name);
     });
 
     return rows;
-  }, [filterMode, parseData, problemSet, searchTerm]);
+  }, [filterMode, parseData, problemSet, searchTerm, sortState]);
 
   const totals = parseData?.totals.by_result ?? {};
   const totalCount = parseData?.totals.total ?? 0;
@@ -303,6 +346,18 @@ export default function App(): React.ReactElement {
   };
   const handleCloseExecutionModal = useCallback((): void => {
     setExecutionModalOpen(false);
+  }, []);
+  const handleToggleSort = useCallback((key: GroupSortKey): void => {
+    setSortState((previous) => {
+      if (previous.key === key) {
+        const nextDirection: SortDirection = previous.direction === "asc" ? "desc" : "asc";
+        return { key, direction: nextDirection };
+      }
+      return {
+        key,
+        direction: key === "base_name" ? "asc" : "desc"
+      };
+    });
   }, []);
 
   return (
@@ -364,6 +419,8 @@ export default function App(): React.ReactElement {
                   onSearchTermChange={setSearchTerm}
                   filterMode={filterMode}
                   onFilterModeChange={setFilterMode}
+                  sortState={sortState}
+                  onToggleSort={handleToggleSort}
                   executions={executionData?.executions ?? []}
                   selectedExecutionId={selectedExecution?.execution_id ?? null}
                   onSelectExecution={handleSelectExecution}

@@ -802,8 +802,9 @@ p {
 
 .upload-zones {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: minmax(260px, 0.95fr) minmax(280px, 1fr) minmax(320px, 1.15fr);
   gap: 12px;
+  align-items: start;
 }
 
 .upload-zone {
@@ -811,6 +812,11 @@ p {
   border-radius: 12px;
   background: #f7fbfd;
   padding: 12px;
+}
+
+.upload-zone-controller {
+  position: sticky;
+  top: 16px;
 }
 
 .upload-zone-title {
@@ -963,22 +969,40 @@ tr:focus-visible {
   list-style: none;
   padding-left: 0;
   margin-top: 10px;
-  max-height: 300px;
+  max-height: 360px;
   overflow-y: auto;
 }
 
 .upload-zone-list .file-list li {
   margin-top: 7px;
+}
+
+.upload-zone-list .file-list li:first-child {
+  margin-top: 0;
+}
+
+.imported-file-button {
+  width: 100%;
   border: 1px solid #d7e4ea;
   border-radius: 8px;
   background: #ffffff;
   padding: 9px 10px;
   display: grid;
-  gap: 8px;
+  gap: 6px;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
 }
 
-.upload-zone-list .file-list li:first-child {
-  margin-top: 0;
+.imported-file-button:hover {
+  background: #f2f9fc;
+  border-color: #b8d2df;
+}
+
+.imported-file-button.is-selected {
+  border-color: #8fc0cc;
+  box-shadow: 0 0 0 2px rgba(0, 109, 119, 0.14);
+  background: #eaf6fa;
 }
 
 .imported-file-name {
@@ -992,6 +1016,14 @@ tr:focus-visible {
   align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
+}
+
+.imported-file-header-panel {
+  margin-bottom: 8px;
+}
+
+.imported-file-summary {
+  margin: 0;
 }
 
 .controller-state-badge {
@@ -1024,6 +1056,16 @@ tr:focus-visible {
   border-radius: 8px;
   background: #f8fbfd;
   padding: 8px;
+}
+
+.controller-panel-content {
+  margin-top: 10px;
+  display: grid;
+  gap: 8px;
+}
+
+.controller-panel-selected {
+  margin-bottom: 0;
 }
 
 .controller-overview {
@@ -1197,6 +1239,45 @@ tr:focus-visible {
   background: #f5f8fa;
   color: #3c5a6a;
   font-weight: 700;
+}
+
+.data-table th.sortable-header {
+  padding: 0;
+}
+
+.table-sort-button {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 6px;
+  font: inherit;
+  font-weight: inherit;
+  padding: 9px 10px;
+  text-align: left;
+}
+
+.table-sort-button:hover {
+  color: #214c61;
+  background: rgba(0, 109, 119, 0.06);
+}
+
+.table-sort-button.is-active {
+  color: #14465b;
+}
+
+.sort-indicator {
+  font-family: "IBM Plex Mono", monospace;
+  font-size: 0.68rem;
+  color: #5a7687;
+}
+
+.table-sort-button.is-active .sort-indicator {
+  color: #0b5c67;
 }
 
 .data-table tbody tr {
@@ -1487,6 +1568,11 @@ tr:focus-visible {
 
   .upload-zones {
     grid-template-columns: 1fr;
+  }
+
+  .upload-zone-controller {
+    position: static;
+    top: auto;
   }
 
   .controller-overview {

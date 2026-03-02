@@ -3,6 +3,7 @@ import { createPortal } from "react-dom";
 
 import ExecutionTable from "../components/ExecutionTable";
 import GroupTable from "../components/GroupTable";
+import type { GroupSortKey, GroupSortState } from "../components/GroupTable";
 import type { ExecutionRow, GroupRow } from "../types";
 
 type GroupFilterMode = "all" | "problem";
@@ -17,6 +18,8 @@ type AnalysisPageProps = {
   onSearchTermChange: (value: string) => void;
   filterMode: GroupFilterMode;
   onFilterModeChange: (mode: GroupFilterMode) => void;
+  sortState: GroupSortState;
+  onToggleSort: (key: GroupSortKey) => void;
   executions: ExecutionRow[];
   selectedExecutionId: string | null;
   onSelectExecution: (execution: ExecutionRow) => void;
@@ -67,6 +70,8 @@ export default function AnalysisPage(props: AnalysisPageProps): React.ReactEleme
     onSearchTermChange,
     filterMode,
     onFilterModeChange,
+    sortState,
+    onToggleSort,
     executions,
     selectedExecutionId,
     onSelectExecution,
@@ -144,6 +149,8 @@ export default function AnalysisPage(props: AnalysisPageProps): React.ReactEleme
             onSearchTermChange={onSearchTermChange}
             filterMode={filterMode}
             onFilterModeChange={onFilterModeChange}
+            sortState={sortState}
+            onToggleSort={onToggleSort}
           />
         </aside>
       </div>

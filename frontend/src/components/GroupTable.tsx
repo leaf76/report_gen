@@ -3,6 +3,12 @@ import React from "react";
 import type { GroupRow } from "../types";
 
 type GroupFilterMode = "all" | "problem";
+export type GroupSortKey = "base_name" | "total" | "pass" | "fail" | "error" | "skip" | "error_rate";
+export type SortDirection = "asc" | "desc";
+export type GroupSortState = {
+  key: GroupSortKey | null;
+  direction: SortDirection;
+};
 
 type GroupTableProps = {
   rows: GroupRow[];
@@ -13,6 +19,8 @@ type GroupTableProps = {
   onSearchTermChange: (value: string) => void;
   filterMode: GroupFilterMode;
   onFilterModeChange: (mode: GroupFilterMode) => void;
+  sortState: GroupSortState;
+  onToggleSort: (key: GroupSortKey) => void;
 };
 
 function resultClass(result: string): string {
@@ -39,6 +47,23 @@ function percent(count: number, total: number): string {
   return `${((count / total) * 100).toFixed(1)}%`;
 }
 
+function getSortIndicator(state: GroupSortState, key: GroupSortKey): string {
+  if (state.key !== key) {
+    return "↕";
+  }
+  return state.direction === "asc" ? "▲" : "▼";
+}
+
+function getAriaSortValue(
+  state: GroupSortState,
+  key: GroupSortKey
+): React.AriaAttributes["aria-sort"] {
+  if (state.key !== key) {
+    return "none";
+  }
+  return state.direction === "asc" ? "ascending" : "descending";
+}
+
 export default function GroupTable(props: GroupTableProps): React.ReactElement {
   const {
     rows,
@@ -48,7 +73,9 @@ export default function GroupTable(props: GroupTableProps): React.ReactElement {
     searchTerm,
     onSearchTermChange,
     filterMode,
-    onFilterModeChange
+    onFilterModeChange,
+    sortState,
+    onToggleSort
   } = props;
 
   const onRowKeyDown = (
@@ -70,6 +97,27 @@ export default function GroupTable(props: GroupTableProps): React.ReactElement {
       return "-";
     }
     return value.toString();
+  };
+
+  const renderSortableHeader = (label: string, key: GroupSortKey): React.ReactElement => {
+    const nextDirection: SortDirection =
+      sortState.key === key ? (sortState.direction === "asc" ? "desc" : "asc") : key === "base_name" ? "asc" : "desc";
+
+    return (
+      <th className="sortable-header" aria-sort={getAriaSortValue(sortState, key)}>
+        <button
+          type="button"
+          className={`table-sort-button ${sortState.key === key ? "is-active" : ""}`}
+          onClick={() => onToggleSort(key)}
+          aria-label={`Sort by ${label} ${nextDirection === "asc" ? "ascending" : "descending"}`}
+        >
+          <span>{label}</span>
+          <span className="sort-indicator" aria-hidden="true">
+            {getSortIndicator(sortState, key)}
+          </span>
+        </button>
+      </th>
+    );
   };
 
   return (
@@ -121,13 +169,13 @@ export default function GroupTable(props: GroupTableProps): React.ReactElement {
           <table className="data-table">
             <thead>
               <tr>
-                <th>Test</th>
-                <th>Total</th>
-                <th>PASS</th>
-                <th>FAIL</th>
-                <th>ERROR</th>
-                <th>SKIP</th>
-                <th>Error Rate</th>
+                {renderSortableHeader("Test", "base_name")}
+                {renderSortableHeader("Total", "total")}
+                {renderSortableHeader("PASS", "pass")}
+                {renderSortableHeader("FAIL", "fail")}
+                {renderSortableHeader("ERROR", "error")}
+                {renderSortableHeader("SKIP", "skip")}
+                {renderSortableHeader("Error Rate", "error_rate")}
                 <th>Status</th>
               </tr>
             </thead>

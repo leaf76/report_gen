@@ -244,8 +244,82 @@ function normalizeControllerInfo(controllerInfo: unknown): ControllerInfoView {
   return { devices: [], fallbackText: formatValue(controllerInfo), isMissing: false };
 }
 
+function controllerInfoSummary(file: NormalizedImportedFile): string {
+  if (file.view.isMissing) {
+    return "Controller info missing.";
+  }
+
+  if (file.view.devices.length > 0) {
+    return `${file.view.devices.length} device(s) detected.`;
+  }
+
+  if (file.view.fallbackText) {
+    return "Controller info available.";
+  }
+
+  return "Controller info not available.";
+}
+
+function renderControllerInfoContent(file: NormalizedImportedFile): React.ReactElement {
+  return (
+    <div className="imported-file-controller">
+      <div className="imported-file-header imported-file-header-panel">
+        <p className="imported-file-name">{file.name}</p>
+        <span className={`controller-state-badge ${file.view.isMissing ? "missing" : "complete"}`}>
+          {file.view.isMissing ? "Missing" : "Complete"}
+        </span>
+      </div>
+      {file.view.devices.length > 0 ? (
+        <div className="controller-device-list">
+          {file.view.devices.map((device, index) => (
+            <article key={device.id} className="controller-device-card">
+              <p className="controller-device-title">Device {index + 1}</p>
+              <div className="controller-chip-row">
+                <span className="controller-chip">
+                  <span className="controller-chip-key">Serial</span>
+                  <span className="controller-chip-value">{device.serial}</span>
+                </span>
+                <span className="controller-chip">
+                  <span className="controller-chip-key">Model</span>
+                  <span className="controller-chip-value">{device.model}</span>
+                </span>
+                <span className="controller-chip">
+                  <span className="controller-chip-key">Version</span>
+                  <span className="controller-chip-value">{device.version}</span>
+                </span>
+              </div>
+              {device.restEntries.length > 0 ? (
+                <details className="controller-more">
+                  <summary>More</summary>
+                  <dl className="controller-info-kv-list">
+                    {device.restEntries.map((entry) => (
+                      <div
+                        key={`${device.id}-${entry.key}-${entry.value}`}
+                        className="controller-info-kv-row"
+                      >
+                        <dt>{entry.key}</dt>
+                        <dd>{entry.value}</dd>
+                      </div>
+                    ))}
+                  </dl>
+                </details>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      ) : file.view.fallbackText ? (
+        <p className="subtle-text">{file.view.fallbackText}</p>
+      ) : (
+        <p className="subtle-text">N/A</p>
+      )}
+    </div>
+  );
+}
+
 export default function FileUploadPanel(props: FileUploadPanelProps): React.ReactElement {
   const { importedFiles, onImport, onClearImport, isParsing, parseError, infoMessage } = props;
+  const [selectedFileHash, setSelectedFileHash] = React.useState<string | null>(null);
+  const previousFileCountRef = React.useRef(0);
 
   const normalizedFiles = React.useMemo<NormalizedImportedFile[]>(
     () =>
@@ -287,6 +361,40 @@ export default function FileUploadPanel(props: FileUploadPanelProps): React.Reac
       conflictCount
     };
   }, [normalizedFiles]);
+
+  React.useEffect(() => {
+    if (normalizedFiles.length === 0) {
+      setSelectedFileHash(null);
+      previousFileCountRef.current = 0;
+      return;
+    }
+
+    const hasNewFile = normalizedFiles.length > previousFileCountRef.current;
+    previousFileCountRef.current = normalizedFiles.length;
+    if (hasNewFile) {
+      setSelectedFileHash(normalizedFiles[normalizedFiles.length - 1].contentHash);
+      return;
+    }
+
+    if (selectedFileHash !== null) {
+      const selectedStillExists = normalizedFiles.some(
+        (file) => file.contentHash === selectedFileHash
+      );
+      if (selectedStillExists) {
+        return;
+      }
+    }
+
+    setSelectedFileHash(normalizedFiles[normalizedFiles.length - 1].contentHash);
+  }, [normalizedFiles, selectedFileHash]);
+
+  const selectedFile = React.useMemo(
+    () =>
+      selectedFileHash === null
+        ? null
+        : normalizedFiles.find((file) => file.contentHash === selectedFileHash) ?? null,
+    [normalizedFiles, selectedFileHash]
+  );
 
   const onInputChange = (event: React.ChangeEvent<HTMLInputElement>): void => {
     const selected = event.target.files ? Array.from(event.target.files) : [];
@@ -353,60 +461,26 @@ export default function FileUploadPanel(props: FileUploadPanelProps): React.Reac
               <ul className="file-list">
                 {normalizedFiles.map((file) => (
                   <li key={file.contentHash}>
-                    <div className="imported-file-header">
-                      <p className="imported-file-name">{file.name}</p>
-                      <span
-                        className={`controller-state-badge ${file.view.isMissing ? "missing" : "complete"}`}
-                      >
-                        {file.view.isMissing ? "Missing" : "Complete"}
-                      </span>
-                    </div>
-                    <div className="imported-file-controller">
-                      <p className="imported-file-controller-title">Controller Info</p>
-                      {file.view.devices.length > 0 ? (
-                        <div className="controller-device-list">
-                          {file.view.devices.map((device, index) => (
-                            <article key={device.id} className="controller-device-card">
-                              <p className="controller-device-title">Device {index + 1}</p>
-                              <div className="controller-chip-row">
-                                <span className="controller-chip">
-                                  <span className="controller-chip-key">Serial</span>
-                                  <span className="controller-chip-value">{device.serial}</span>
-                                </span>
-                                <span className="controller-chip">
-                                  <span className="controller-chip-key">Model</span>
-                                  <span className="controller-chip-value">{device.model}</span>
-                                </span>
-                                <span className="controller-chip">
-                                  <span className="controller-chip-key">Version</span>
-                                  <span className="controller-chip-value">{device.version}</span>
-                                </span>
-                              </div>
-                              {device.restEntries.length > 0 ? (
-                                <details className="controller-more">
-                                  <summary>More</summary>
-                                  <dl className="controller-info-kv-list">
-                                    {device.restEntries.map((entry) => (
-                                      <div
-                                        key={`${device.id}-${entry.key}-${entry.value}`}
-                                        className="controller-info-kv-row"
-                                      >
-                                        <dt>{entry.key}</dt>
-                                        <dd>{entry.value}</dd>
-                                      </div>
-                                    ))}
-                                  </dl>
-                                </details>
-                              ) : null}
-                            </article>
-                          ))}
-                        </div>
-                      ) : file.view.fallbackText ? (
-                        <p className="subtle-text">{file.view.fallbackText}</p>
-                      ) : (
-                        <p className="subtle-text">N/A</p>
-                      )}
-                    </div>
+                    <button
+                      type="button"
+                      className={`imported-file-button ${
+                        selectedFileHash === file.contentHash ? "is-selected" : ""
+                      }`}
+                      onClick={() => setSelectedFileHash(file.contentHash)}
+                      aria-pressed={selectedFileHash === file.contentHash}
+                    >
+                      <div className="imported-file-header">
+                        <p className="imported-file-name">{file.name}</p>
+                        <span
+                          className={`controller-state-badge ${
+                            file.view.isMissing ? "missing" : "complete"
+                          }`}
+                        >
+                          {file.view.isMissing ? "Missing" : "Complete"}
+                        </span>
+                      </div>
+                      <p className="subtle-text imported-file-summary">{controllerInfoSummary(file)}</p>
+                    </button>
                   </li>
                 ))}
               </ul>
@@ -415,10 +489,38 @@ export default function FileUploadPanel(props: FileUploadPanelProps): React.Reac
             <p className="subtle-text">No files imported yet.</p>
           )}
         </div>
+
+        <div className="upload-zone upload-zone-controller">
+          <div className="upload-zone-list-header">
+            <p className="upload-zone-title">Controller Info</p>
+          </div>
+          <div className="controller-panel-content" aria-live="polite">
+            {normalizedFiles.length === 0 ? (
+              <p className="subtle-text">No controller info available yet.</p>
+            ) : selectedFile ? (
+              <>
+                <p className="subtle-text controller-panel-selected">
+                  Selected file: <strong>{selectedFile.name}</strong>
+                </p>
+                {renderControllerInfoContent(selectedFile)}
+              </>
+            ) : (
+              <p className="subtle-text">Select a file to view controller details.</p>
+            )}
+          </div>
+        </div>
       </div>
 
-      {infoMessage ? <p className="success-text">{infoMessage}</p> : null}
-      {parseError ? <p className="error-text">{parseError}</p> : null}
+      {infoMessage ? (
+        <p className="success-text" aria-live="polite">
+          {infoMessage}
+        </p>
+      ) : null}
+      {parseError ? (
+        <p className="error-text" aria-live="polite">
+          {parseError}
+        </p>
+      ) : null}
     </section>
   );
 }
