@@ -43,7 +43,7 @@ chmod +x Report.Generator_<version>_<arch>.AppImage
 ./Report.Generator_<version>_<arch>.AppImage
 ```
 
-- Release tags and bundle versions must match. For example, tag `v0.1.5` produces assets with version `0.1.5`.
+- Release tags and bundle versions must match. For example, tag `v0.1.6` produces assets with version `0.1.6`.
 
 ## Technical Notes
 
