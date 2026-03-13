@@ -33,6 +33,18 @@ cd frontend
 npm run tauri:build
 ```
 
+## GitHub Releases
+
+- GitHub Releases now publish Linux `AppImage`, `deb`, and `rpm` artifacts.
+- For Linux, prefer the `AppImage` asset if you want a direct download that runs without installing a package.
+
+```bash
+chmod +x Report.Generator_<version>_<arch>.AppImage
+./Report.Generator_<version>_<arch>.AppImage
+```
+
+- Release tags and bundle versions must match. For example, tag `v0.1.5` produces assets with version `0.1.5`.
+
 ## Technical Notes
 
 - YAML parsing, aggregation, and Excel export are implemented in Rust commands.

@@ -1,6 +1,6 @@
 [package]
 name = "report_gen_tauri"
-version = "0.1.0"
+version = "0.1.5"
 description = "Desktop report generator powered by Tauri and Rust"
 authors = ["cy76"]
 edition = "2021"
@@ -21,4 +21,3 @@ thiserror = "1.0"
 uuid = { version = "1.11", features = ["v4"] }
 regex = "1.11"
 umya-spreadsheet = "2.3.3"
-
