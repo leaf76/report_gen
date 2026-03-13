@@ -1,6 +1,6 @@
 [package]
 name = "report_gen_tauri"
-version = "0.1.6"
+version = "0.1.7"
 description = "Desktop report generator powered by Tauri and Rust"
 authors = ["cy76"]
 edition = "2021"
